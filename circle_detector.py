@@ -28,9 +28,16 @@ class CircleDetector:
         blurred = cv2.GaussianBlur(gray, (9, 9), 2)
 
         circles = cv2.HoughCircles(
-            blurred, cv2.HOUGH_GRADIENT, dp=1, minDist=30,
-            param1=50, param2=30, minRadius=5, maxRadius=15
+            blurred,
+            cv2.HOUGH_GRADIENT, 
+            dp=1, 
+            minDist=30,
+            param1=50, 
+            param2=30, 
+            minRadius=0, 
+            maxRadius=30
         )
+
         count = 0
         if circles is not None:
             circles = np.round(circles[0, :]).astype("int")
@@ -49,16 +56,17 @@ class CircleDetector:
         _, binary = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
 
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
         circle_count = 0
         for contour in contours:
             area = cv2.contourArea(contour)
-            if area < 100 or area > 5000:
+            if area < 50 or area > 500:
                 continue
             perimeter = cv2.arcLength(contour, True)
             if perimeter == 0:
                 continue
             circularity = 4 * np.pi * area / (perimeter * perimeter)
-            if circularity > 0.7:
+            if circularity > 0.55:
                 (x, y), radius = cv2.minEnclosingCircle(contour)
                 center = (int(x), int(y))
                 radius = int(radius)
@@ -70,13 +78,13 @@ class CircleDetector:
                 circle_count += 1
         return result, circle_count
 
-    def predict(self, source=0, mode="hough", show=True, verbose=True, save=True):
+    def predict(self, source=0, mode="hough", show=True, verbose=True, save=False):
         """
         :param source: int (webcam), str (path ảnh/video), hoặc np.ndarray (ảnh)
         :param mode: "hough" hoặc "contour"
-        :param show: True/False -> hiển thị kết quả
-        :param verbose: True/False -> log chi tiết
-        :param save: True/False -> lưu kết quả
+        :param show: bool -> hiển thị kết quả
+        :param verbose: bool -> log chi tiết
+        :param save: bool -> lưu kết quả
         """
         if not verbose:
             LOGGER.setLevel("WARNING")
