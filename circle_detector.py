@@ -49,32 +49,75 @@ class CircleDetector:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
         return result, len(centers), np.array(centers, dtype=float)
 
+    def _clahe_L(self, frame, clip=2.0, tile=(8,8)):
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        L, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=tile)
+        L = clahe.apply(L)
+        lab = cv2.merge([L, a, b])
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+    def _illumination_normalize(self, gray, sigma=25):
+        # khử nền sáng không đều: gray_norm ≈ gray / blur
+        blur = cv2.GaussianBlur(gray, (0,0), sigmaX=sigma, sigmaY=sigma)
+        norm = cv2.divide(gray, blur, scale=128)  # scale cho lại range
+        return norm
+
     def detect_contour(self, frame):
+        """
+        Phát hiện dot bền với loá sáng / bóng đổ.
+        Trả về: result_img, count, centers(np.float32 Nx2)
+        """
         result = frame.copy()
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        _, binary = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
 
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # 1) Tăng tương phản kênh sáng + khử nền
+        eq = self._clahe_L(frame, clip=2.0, tile=(8,8))
+        gray = cv2.cvtColor(eq, cv2.COLOR_BGR2GRAY)
+        gray = self._illumination_normalize(gray, sigma=25)
+
+        # 2) Adaptive threshold (đảo để chấm đen -> trắng)
+        th = cv2.adaptiveThreshold(
+            gray, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV,
+            blockSize=35, C=5
+        )
+
+        # 3) Morphology nhẹ để dọn nhiễu và làm tròn dot
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
+        th = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel, iterations=1)
+        th = cv2.morphologyEx(th, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        # 4) Contour + lọc theo diện tích & độ tròn
+        contours, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        H, W = gray.shape
+        # scale ngưỡng theo ảnh (đỡ phải chỉnh tay)
+        scale = max(H, W)
+        min_area = max(20, int(0.00002 * scale * scale))   # ~0.002% ảnh
+        max_area = int(0.003 * scale * scale)              # ~0.3% ảnh
+        min_circ = 0.6
+
         centers = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < min_area or area > max_area:
+                continue
+            per = cv2.arcLength(cnt, True)
+            if per == 0:
+                continue
+            circ = 4 * np.pi * area / (per * per)
+            if circ < min_circ:
+                continue
 
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if area < 30 or area > 4000:
-                continue
-            perimeter = cv2.arcLength(contour, True)
-            if perimeter == 0:
-                continue
-            circularity = 4 * np.pi * area / (perimeter * perimeter)
-            if circularity > 0.55:
-                (x, y), radius = cv2.minEnclosingCircle(contour)
-                center = (int(x), int(y))
-                centers.append(center)
-                radius = int(radius)
-                cv2.circle(result, center, radius, (0, 255, 0), 2)
-                cv2.circle(result, center, 2, (0, 0, 255), 3)
-                cv2.putText(result, f"C:{circularity:.2f}",
-                            (center[0]-30, center[1]-radius-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+            (x, y), r = cv2.minEnclosingCircle(cnt)
+            x, y, r = int(round(x)), int(round(y)), int(round(r))
+            centers.append((x, y))
+
+            # vẽ minh hoạ
+            cv2.circle(result, (x, y), r, (0, 255, 0), 2)
+            cv2.circle(result, (x, y), 2, (0, 0, 255), 3)
+            cv2.putText(result, f"A:{int(area)} C:{circ:.2f}", (x-30, y-r-8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
 
         return result, len(centers), np.array(centers, dtype=float)
 
