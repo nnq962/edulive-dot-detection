@@ -7,11 +7,12 @@ import time
 
 
 class CircleDetector:
-    def __init__(self, results_dir="results"):
+    def __init__(self, results_dir="results", draw_raw=False):
         """
         :param results_dir: thư mục gốc để lưu kết quả
         """
         self.results_dir = results_dir
+        self.draw_raw = draw_raw
 
     def get_next_run_dir(self):
         os.makedirs(self.results_dir, exist_ok=True)
@@ -43,10 +44,11 @@ class CircleDetector:
             circles = np.round(circles[0, :]).astype("int")
             for (x, y, r) in circles:
                 centers.append((x, y))
-                cv2.circle(result, (x, y), r, (0, 255, 0), 2)
-                cv2.circle(result, (x, y), 2, (0, 0, 255), 3)
-                cv2.putText(result, f"R:{r}", (x-20, y-r-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+                if self.draw_raw:
+                    cv2.circle(result, (x, y), r, (0, 255, 0), 2)
+                    cv2.circle(result, (x, y), 2, (0, 0, 255), 3)
+                    cv2.putText(result, f"R:{r}", (x-20, y-r-10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
         return result, len(centers), np.array(centers, dtype=float)
 
     def _clahe_L(self, frame, clip=2.0, tile=(8,8)):
@@ -113,11 +115,12 @@ class CircleDetector:
             x, y, r = int(round(x)), int(round(y)), int(round(r))
             centers.append((x, y))
 
-            # vẽ minh hoạ
-            cv2.circle(result, (x, y), r, (0, 255, 0), 2)
-            cv2.circle(result, (x, y), 2, (0, 0, 255), 3)
-            cv2.putText(result, f"A:{int(area)} C:{circ:.2f}", (x-30, y-r-8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+            if self.draw_raw:
+                # vẽ minh hoạ
+                cv2.circle(result, (x, y), r, (0, 255, 0), 2)
+                cv2.circle(result, (x, y), 2, (0, 0, 255), 3)
+                cv2.putText(result, f"A:{int(area)} C:{circ:.2f}", (x-30, y-r-8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
 
         return result, len(centers), np.array(centers, dtype=float)
 
